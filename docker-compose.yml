@@ -4,17 +4,14 @@ services:
   whisper-api:
     build: 
       context: ./api
-
-    container_name: whisper-api-single-instance
+    ports:
+      - "8000:8000"
     environment:
       - API_KEY=${API_KEY}
-      - PYTHONPATH=/app
     volumes:
       - ./api:/app
       - whisper-models:/root/.cache/whisper
-    restart: "no"
-    expose:
-      - "8000"
+    restart: unless-stopped
 
 volumes:
   whisper-models:
