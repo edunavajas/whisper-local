@@ -14,6 +14,9 @@ COPY . .
 
 RUN ls -la
 
+RUN echo '#!/bin/bash\necho "Current directory:"\npwd\necho "Directory contents:"\nls -la\necho "Python path:"\npython -c "import sys; print(sys.path)"\necho "Starting server..."\npython -c "import uvicorn; uvicorn.run(\"main:app\", host=\"0.0.0.0\", port=8000)"' > /app/start.sh \
+    && chmod +x /app/start.sh
+
 EXPOSE 8000
 
 ENV PYTHONPATH=/app
