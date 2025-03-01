@@ -1,58 +1,123 @@
 import os
 import tempfile
+import subprocess
 import whisper
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Security, Depends
+from fastapi.security.api_key import APIKeyHeader
 from fastapi.responses import JSONResponse
+from dotenv import load_dotenv
 
-app = FastAPI(title="Whisper API", description="API para transcripción de audio usando Whisper")
+# Cargar variables de entorno
+load_dotenv()
 
-# Cargar el modelo al inicio (puedes cambiarlo a "base", "small", "medium" o "large" según necesites)
+app = FastAPI(title="Whisper API", description="API for audio transcription using Whisper")
+
+# Configuración de autenticación
+API_KEY = os.getenv("API_KEY", "")
+api_key_header = APIKeyHeader(name="X-API-Key")
+
+# Función para verificar la API key
+async def get_api_key(api_key_header: str = Security(api_key_header)):
+    if api_key_header != API_KEY:
+        raise HTTPException(
+            status_code=403,
+            detail="Could not validate API key"
+        )
+    return api_key_header
+
 model = None
+
+VIDEO_FORMATS = ('.mp4', '.avi', '.mkv', '.mov', '.webm', '.flv', '.wmv')
+AUDIO_FORMATS = ('.mp3', '.wav', '.m4a', '.ogg', '.flac', '.aac', '.wma', '.opus', '.amr')
+ALL_FORMATS = VIDEO_FORMATS + AUDIO_FORMATS
 
 @app.on_event("startup")
 async def startup_event():
     global model
-    print("Cargando modelo Whisper...")
+    print("Loading Whisper model...")
     model = whisper.load_model("base")
-    print("Modelo cargado correctamente!")
+    print("Model loaded successfully!")
 
 @app.post("/transcribe/", response_class=JSONResponse)
-async def transcribe_audio(file: UploadFile = File(...), language: str = None):
+async def transcribe_audio(
+    file: UploadFile = File(...),
+    language: str = None,
+    api_key: str = Depends(get_api_key)
+):
     """
-    Transcribe un archivo de audio usando Whisper.
-    - **file**: Archivo de audio a transcribir (formatos soportados: mp3, wav, m4a, etc.)
-    - **language**: Código de idioma opcional (es, en, fr, etc.)
+    Transcribe an audio or video file using Whisper.
+    - **file**: File to be transcribed (audio or video)
+    - **language**: Optional language code (es, en, fr, etc.)
+    Requires API key authentication in X-API-Key header
     """
-    if not file.filename.endswith(('.mp3', '.wav', '.m4a', '.ogg', '.flac')):
-        raise HTTPException(status_code=400, detail="Formato de archivo no soportado")
+    file_extension = os.path.splitext(file.filename.lower())[1]
+    if file_extension not in ALL_FORMATS:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Format {file_extension} not supported. Supported formats: {', '.join(ALL_FORMATS)}"
+        )
 
-    # Guardar archivo temporalmente
-    with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as temp:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as temp_input:
         try:
-            # Escribir contenido del archivo
             content = await file.read()
-            temp.write(content)
-            temp.flush()
-            
-            # Configurar opciones de transcripción
-            transcribe_options = {}
+            temp_input.write(content)
+            temp_input.flush()
+            input_path = temp_input.name
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_output:
+                output_path = temp_output.name
+
+            print(f"Converting file {file.filename} to WAV format for processing...")
+            try:
+                subprocess.run([
+                    'ffmpeg', 
+                    '-y',
+                    '-i', input_path, 
+                    '-ar', '16000',
+                    '-ac', '1',
+                    '-c:a', 'pcm_s16le',
+                    output_path
+                ], check=True, capture_output=True)
+            except subprocess.CalledProcessError as e:
+                print(f"FFmpeg error: {e.stderr.decode() if e.stderr else str(e)}")
+                raise HTTPException(
+                    status_code=500,
+                    detail="Error processing file. Ensure it is a valid audio or video file."
+                )
+
+            options = {}
             if language:
-                transcribe_options["language"] = language
-            
-            # Realizar transcripción
-            result = model.transcribe(temp.name, **transcribe_options)
-            
+                options["language"] = language
+
+            print("Transcribing audio...")
+            result = model.transcribe(output_path, **options)
+            print("Transcription completed.")
+
             return {
                 "text": result["text"],
                 "segments": result["segments"],
-                "language": result["language"]
+                "language": result["language"],
+                "original_filename": file.filename
             }
-        
+
         finally:
-            # Limpiar archivo temporal
-            os.unlink(temp.name)
+            try:
+                if os.path.exists(input_path):
+                    os.unlink(input_path)
+                if os.path.exists(output_path):
+                    os.unlink(output_path)
+            except Exception as e:
+                print(f"Error removing temporary files: {e}")
 
 @app.get("/health/")
-def health_check():
-    """Verificar que el servicio está funcionando"""
+def health_check(api_key: str = Depends(get_api_key)):
+    """Check if the service is running"""
     return {"status": "ok", "model_loaded": model is not None}
+
+@app.get("/formats/")
+def supported_formats(api_key: str = Depends(get_api_key)):
+    """List supported formats"""
+    return {
+        "video_formats": VIDEO_FORMATS,
+        "audio_formats": AUDIO_FORMATS
+    }

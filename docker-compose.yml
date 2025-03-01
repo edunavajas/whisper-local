@@ -2,9 +2,12 @@ version: '3.8'
 
 services:
   whisper-api:
-    build: ./api
+    build: 
+      context: ./api
     ports:
       - "8000:8000"
+    environment:
+      - API_KEY=${API_KEY}  # Esto tomará el valor del archivo .env
     volumes:
       - ./api:/app
       - whisper-models:/root/.cache/whisper
