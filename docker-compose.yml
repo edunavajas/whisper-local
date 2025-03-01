@@ -4,8 +4,8 @@ services:
   whisper-api:
     build: 
       context: ./api
-    ports:
-      - "8128:8000"
+
+    container_name: whisper-api-single-instance
     environment:
       - API_KEY=${API_KEY}
       - PYTHONPATH=/app
@@ -13,11 +13,8 @@ services:
       - ./api:/app
       - whisper-models:/root/.cache/whisper
     restart: "no"
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: on-failure
-        max_attempts: 3
+    expose:
+      - "8000"
 
 volumes:
   whisper-models:
