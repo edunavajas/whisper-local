@@ -9,7 +9,7 @@ services:
     environment:
       - API_KEY=${API_KEY}
     volumes:
-      - ./api:/app
+      #- ./api:/app
       - whisper-models:/root/.cache/whisper
     restart: unless-stopped
 
