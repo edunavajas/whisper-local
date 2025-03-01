@@ -72,7 +72,8 @@ async def transcribe_audio(
                 subprocess.run([
                     'ffmpeg', 
                     '-y',
-                    '-i', input_path, 
+                    '-i', input_path,
+                    '-af', 'silenceremove=stop_threshold=-50dB:stop_duration=1:stop_periods=-1',  #Delete silences
                     '-ar', '16000',
                     '-ac', '1',
                     '-c:a', 'pcm_s16le',
