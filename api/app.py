@@ -28,7 +28,7 @@ async def get_api_key(api_key_header: str = Security(api_key_header)):
 model = None
 
 VIDEO_FORMATS = ('.mp4', '.avi', '.mkv', '.mov', '.webm', '.flv', '.wmv')
-AUDIO_FORMATS = ('.mp3', '.wav', '.m4a', '.ogg', '.flac', '.aac', '.wma', '.opus', '.amr')
+AUDIO_FORMATS = ('.mp3', '.wav', '.m4a', '.ogg', '.flac', '.aac', '.wma', '.opus', '.amr','.oga')
 ALL_FORMATS = VIDEO_FORMATS + AUDIO_FORMATS
 
 @app.on_event("startup")
